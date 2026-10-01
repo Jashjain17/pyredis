@@ -8,7 +8,7 @@ SERVER=socket.gethostbyname(socket.gethostname())
 ADDR=(SERVER,PORT)
 FORMAT='utf-8'
 DISCONNECT_MESSAGE="DISCONNECTED"
-
+store={}
 
 server=socket.socket(socket.AF_INET,socket.SOCK_STREAM)
 server.bind(ADDR)
@@ -25,11 +25,34 @@ def handle_client(conn,addr):
         if msg_length:
             msg_length=int(msg_length)
             msg=conn.recv(msg_length).decode(FORMAT) #how many bites we will be receiving for the actual message 
-            if msg==DISCONNECT_MESSAGE: # condition to know client wants to disconnect 
-                connected=False
-
+            
             print(f"{addr} {msg}") #print out the user and their message
-            conn.send("Msg received".encode(FORMAT)) #everytime we get a message we encode it and send it back
+            parts=msg.split()# split the message into words — first word is the command, rest are arguments
+            command=parts[0].upper()
+            args=parts[1:]
+            print(command,args)
+            if command == "PING":
+                response="PONG"
+            elif command=="SET":
+                key,value=args
+                store[key]=value
+                response="OK"
+            elif command=="GET":
+                key=args[0]
+                response=store.get(key,("nil"))
+            elif command=="DEL":
+                key=args[0]
+                existed=key in store
+                store.pop(key,None)
+                response="1" if existed else "0"
+            elif command=="DISCONNECTED":
+                response="DISCONNECTED"
+                connected=False
+            else:
+                response="ERR unknown command"
+            # do the right thing for that command
+            # send a response back based on what happened
+            conn.send(response.encode(FORMAT)) #everytime we get a message we encode it and send it back
     conn.close() #close the connection   
 
 

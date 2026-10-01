@@ -5,6 +5,7 @@ FORMAT='utf-8'
 DISCONNECT_MESSAGE="DISCONNECTED"
 SERVER=socket.gethostbyname(socket.gethostname())
 ADDR=(SERVER,PORT)
+store={}#to actually store the data and it must persists across clients and acorss messages 
 client=socket.socket(socket.AF_INET,socket.SOCK_STREAM)
 client.connect(ADDR)#connect to the server 
 
@@ -17,8 +18,8 @@ def send(msg):#to send message to the server
     client.send(message)
     print(client.recv(2048).decode(FORMAT))
 
-send("Hello World")
+send("SET a 1")
 input()
-send("Hash")
+send("GET a ")
 input()
 send(DISCONNECT_MESSAGE)
