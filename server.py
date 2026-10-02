@@ -8,8 +8,77 @@ SERVER=socket.gethostbyname(socket.gethostname())
 ADDR=(SERVER,PORT)
 FORMAT='utf-8'
 DISCONNECT_MESSAGE="DISCONNECTED"
-store={}
-lock=threading.lock()
+
+class Node:
+    def __init__(self,key,value):
+        self.key=key
+        self.value=value
+        self.prev=None
+        self.next=None
+
+class LRUCache:
+    def __init__(self,capacity):
+        self.capacity=capacity
+        self.cache={}
+
+        self.head=Node(None,None)
+        self.tail=Node(None,None)
+
+        self.head.next=self.tail
+        self.tail.prev=self.head
+
+    def remove(self,node):
+        node.prev.next=node.next
+        node.next.prev=node.prev
+
+    def insert_at_front(self,node):
+        node.next=self.head.next
+        node.prev=self.head
+
+        self.head.next.prev=node
+        self.head.next=node
+
+    def get(self,key):
+        if key not in self.cache:
+            return None
+        
+        node=self.cache[key]
+
+        self.remove(node)
+        self.insert_at_front(node)
+
+        return node.value
+
+    def set(self,key,value):
+        if key in self.cache:
+            node=self.cache[key]
+            node.value=value
+
+            self.remove(node)
+            self.insert_at_front(node)
+            return
+        node=Node(key,value)
+        self.cache[key]=node
+        self.insert_at_front(node)
+
+        if len(self.cache)>self.capacity:
+            lru=self.tail.prev
+
+            self.remove(lru)
+            del self.cache[lru.key]
+
+    def delete(self,key):
+        if key not in self.cache:
+            return False
+        node=self.cache[key]
+        self.remove(node)
+        del self.cache[key]
+
+        return True
+
+
+store=LRUCache(3)
+lock=threading.Lock()
 
 
 server=socket.socket(socket.AF_INET,socket.SOCK_STREAM)
@@ -37,15 +106,19 @@ def handle_client(conn,addr):
                 response="PONG"
             elif command=="SET":
                 key,value=args
-                store[key]=value
+                with lock:
+                    store.set(key,value)
                 response="OK"
             elif command=="GET":
                 key=args[0]
-                response=store.get(key,("nil"))
+                with lock:
+                    response=store.get(key)
+                if response is None:
+                    response="nil"
             elif command=="DEL":
                 key=args[0]
-                existed=key in store
-                store.pop(key,None)
+                with lock:
+                    existed=store.delete(key)
                 response="1" if existed else "0"
             elif command=="DISCONNECTED":
                 response="DISCONNECTED"
@@ -53,11 +126,13 @@ def handle_client(conn,addr):
             elif command=="INCR":
                 key=args[0]
                 with lock:
-                    value=int(store.get(key,0))
-                    value+=1
-                    store[key]=str(value)
+                    current=store.get(key)
+                    if current is None:
+                        value=1
+                    else:
+                        value=int(current)+1
+                    store.set(key,str(value))
                     response=str(value)
-  
             else:
                 response="ERR unknown command"
  
