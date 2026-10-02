@@ -9,6 +9,8 @@ ADDR=(SERVER,PORT)
 FORMAT='utf-8'
 DISCONNECT_MESSAGE="DISCONNECTED"
 store={}
+lock=threading.lock()
+
 
 server=socket.socket(socket.AF_INET,socket.SOCK_STREAM)
 server.bind(ADDR)
@@ -48,10 +50,17 @@ def handle_client(conn,addr):
             elif command=="DISCONNECTED":
                 response="DISCONNECTED"
                 connected=False
+            elif command=="INCR":
+                key=args[0]
+                with lock:
+                    value=int(store.get(key,0))
+                    value+=1
+                    store[key]=str(value)
+                    response=str(value)
+  
             else:
                 response="ERR unknown command"
-            # do the right thing for that command
-            # send a response back based on what happened
+ 
             conn.send(response.encode(FORMAT)) #everytime we get a message we encode it and send it back
     conn.close() #close the connection   
 
@@ -60,7 +69,7 @@ def start(): #will allow server to listen to connections and handle those connen
     server.listen()
     print(f"Server is listening to {SERVER}")
     while True:
-        conn,addr =server.accept() #we wait on this line for a new connection to the server and save its address(ip address and port) and then we will store and actual object that will allow us to send info back to the connection
+        conn,addr =server.accept() #we wait on this line for a new connection to the server and save its address(ip address and port)in addr as a tuple and then we will store an actual object that will allow us to send info back to the connection
         thread=threading.Thread(target=handle_client,args=(conn,addr)) #passing the new connection to handle client(target) with conn and addr as arguments
         thread.start()
         print(f"[ACTIVE CONNECTIONS] {threading.active_count()-1}") # how many theads are active on this processor
