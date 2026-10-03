@@ -1,6 +1,6 @@
 import socket 
 import threading 
-
+import time 
 
 HEADER=64 #will tell the server that the first message should always be of size 64 that will tell us the size of the message that we are about to receive next 
 PORT=5050
@@ -10,11 +10,13 @@ FORMAT='utf-8'
 DISCONNECT_MESSAGE="DISCONNECTED"
 
 class Node:
-    def __init__(self,key,value):
+    def __init__(self,key,value,expiry=None):
         self.key=key
         self.value=value
+        self.expiry=expiry
         self.prev=None
         self.next=None
+
 
 class LRUCache:
     def __init__(self,capacity):
@@ -43,20 +45,40 @@ class LRUCache:
             return None
         
         node=self.cache[key]
-
+        #Checking if the key is expired 
+        if node.expiry is not None and time.time()>=node.expiry:
+            self.delete(key)
+            return key
+        
         self.remove(node)
         self.insert_at_front(node)
 
         return node.value
+    def ttl(self,key):
+        if key not in self.cache:
+            return None
+        node=self.cache[key]
 
-    def set(self,key,value):
+        if node.expiry is None:
+            return -1
+
+        remaining= int(node.expiry-time.time())
+
+        if remaining<=0:
+            self.delete(key)
+            return None
+        return remaining
+    
+    def set(self,key,value,expiry=None):
         if key in self.cache:
             node=self.cache[key]
             node.value=value
+            node.expiry=expiry
 
             self.remove(node)
             self.insert_at_front(node)
             return
+        
         node=Node(key,value)
         self.cache[key]=node
         self.insert_at_front(node)
@@ -80,6 +102,20 @@ class LRUCache:
 store=LRUCache(3)
 lock=threading.Lock()
 
+def expire_sweeper():
+    while True:
+        time.sleep(1)
+
+        with lock:
+            current_time=time.time()
+
+            for key in list(store.cache.keys()):
+                node=store.cache[key]
+                if node.expiry is not None and current_time >=node.expiry:
+                    store.delete(key)
+
+sweeper=threading.Thread(target=expire_sweeper,daemon=True)
+sweeper.start()
 
 server=socket.socket(socket.AF_INET,socket.SOCK_STREAM)
 server.bind(ADDR)
@@ -105,7 +141,12 @@ def handle_client(conn,addr):
             if command == "PING":
                 response="PONG"
             elif command=="SET":
-                key,value=args
+                key=args[0]
+                value=args[1]
+                exipry=None
+                if len(args)==4 and args[2].upper()=="EX":
+                    seconds=int(args[3])
+                    expiry=time.time()+seconds
                 with lock:
                     store.set(key,value)
                 response="OK"
@@ -133,6 +174,15 @@ def handle_client(conn,addr):
                         value=int(current)+1
                     store.set(key,str(value))
                     response=str(value)
+            elif command=="TTL":
+                key=args[0]
+                with lock:
+                    remaining =store.ttl(key)
+
+                if remaining is None:
+                    response="nil"
+                else:
+                    response=str(remaining)
             else:
                 response="ERR unknown command"
  
