@@ -79,7 +79,7 @@ class LRUCache:
             self.insert_at_front(node)
             return
         
-        node=Node(key,value)
+        node=Node(key,value,expiry)
         self.cache[key]=node
         self.insert_at_front(node)
 
@@ -148,7 +148,7 @@ def handle_client(conn,addr):
                     seconds=int(args[3])
                     expiry=time.time()+seconds
                 with lock:
-                    store.set(key,value)
+                    store.set(key,value,expiry)
                 response="OK"
             elif command=="GET":
                 key=args[0]
