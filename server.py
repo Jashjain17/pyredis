@@ -1,6 +1,7 @@
 import socket 
 import threading 
 import time 
+import json
 
 HEADER=64 #will tell the server that the first message should always be of size 64 that will tell us the size of the message that we are about to receive next 
 PORT=5050
@@ -98,9 +99,29 @@ class LRUCache:
 
         return True
 
-
 store=LRUCache(3)
 lock=threading.Lock()
+
+def save_data():
+    data={}
+    for key,node in store.cache.items():
+        data[key]={
+            "value":node.value,
+            "expiry":node.expiry
+        }
+    with open("data.json","w") as file:
+        json.dump(data,file)
+def load_data():
+    try:
+        with open("data.json","r") as file:
+            data=json.load(file)
+    except FileNotFoundError:
+        return
+    for key,item in data.items():
+        if item["expiry"] is not None and time.time()>= item["expiry"]:
+            continue
+        store.set(key,item["value"],item["expiry"])
+
 
 def expire_sweeper():
     while True:
@@ -114,6 +135,7 @@ def expire_sweeper():
                 if node.expiry is not None and current_time >=node.expiry:
                     store.delete(key)
 
+load_data()
 sweeper=threading.Thread(target=expire_sweeper,daemon=True)
 sweeper.start()
 
@@ -143,12 +165,13 @@ def handle_client(conn,addr):
             elif command=="SET":
                 key=args[0]
                 value=args[1]
-                exipry=None
+                expiry=None
                 if len(args)==4 and args[2].upper()=="EX":
                     seconds=int(args[3])
                     expiry=time.time()+seconds
                 with lock:
                     store.set(key,value,expiry)
+                    save_data()
                 response="OK"
             elif command=="GET":
                 key=args[0]
@@ -160,6 +183,7 @@ def handle_client(conn,addr):
                 key=args[0]
                 with lock:
                     existed=store.delete(key)
+                    save_data()
                 response="1" if existed else "0"
             elif command=="DISCONNECTED":
                 response="DISCONNECTED"
@@ -173,6 +197,7 @@ def handle_client(conn,addr):
                     else:
                         value=int(current)+1
                     store.set(key,str(value))
+                    save_data()
                     response=str(value)
             elif command=="TTL":
                 key=args[0]

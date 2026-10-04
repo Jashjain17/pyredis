@@ -18,10 +18,5 @@ def send(msg):#to send message to the server
     client.send(message)
     print(client.recv(2048).decode(FORMAT))
 
-send("SET A 100 EX 10")
-input()
-send("GET A")
-input()
-send("TTL A")
-input()
-send("GET A")
+
+send("TTL TEMP")
